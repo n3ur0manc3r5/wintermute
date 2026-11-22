@@ -1,0 +1,14 @@
+.venv/
+.idea/
+build/
+cmake-build-*/
+__pycache__/
+*.pyc
+*.o
+*.nmv
+*.nmm
+*.obj
+*.ppm
+*.png
+*.html
+.DS_Store
