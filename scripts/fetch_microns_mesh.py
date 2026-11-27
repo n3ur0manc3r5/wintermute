@@ -46,8 +46,16 @@ def main():
     print(f"target: {args.root_id} ({cell_type.lower()}) lod={args.lod} soma_um={(soma_nm * 1e-3).round(2).tolist()}")
 
     seg_url = resolve_seg_source(args.datastack)
-    cv = CloudVolume(seg_url, progress=False)
-    mesh = cv.mesh.get(args.root_id, lod=args.lod)[args.root_id]
+    cv = CloudVolume(seg_url, progress=False, use_https=True)
+
+    try: 
+        mesh = cv.mesh.get(args.root_id, lod=args.lod)[args.root_id]
+    except Exception as e:
+        print("The mesh source used might be dynamic which doesn't accept lod as a parameter")
+        print(f"The error is {e}")
+        mesh = cv.mesh.get(args.root_id)[args.root_id]
+
+
 
     verts = np.ascontiguousarray(mesh.vertices, dtype=np.float32)
     faces = np.ascontiguousarray(mesh.faces, dtype=np.uint32)
