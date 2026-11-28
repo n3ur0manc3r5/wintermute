@@ -11,4 +11,5 @@ __pycache__/
 *.ppm
 *.png
 *.html
+!data/circuit_20/*
 .DS_Store
