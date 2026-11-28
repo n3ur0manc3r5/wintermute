@@ -390,6 +390,10 @@ def main():
     parser.add_argument("--bin", default="./build/neuromancers")
     parser.add_argument("--out-dir", default="./data/circuit")
     parser.add_argument("--datastack", default="minnie65_public")
+    parser.add_argument("--circuit-tube-sides", type=int, default=6,
+                        help="sides of each tube in the circuit viewer (more = smoother, bigger file)")
+    parser.add_argument("--circuit-soma-vox", type=float, default=450,
+                        help="soma voxel size in nm for the circuit viewer (smaller = more detail, bigger file)")
     args = parser.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
@@ -460,7 +464,7 @@ def main():
             check=True,
         )
         subprocess.run(
-            [args.bin, "--voxelize", swc_path, "--tube-sides", "6", "--soma-vox", "450", "--out-obj", cobj_path],
+            [args.bin, "--voxelize", swc_path, "--tube-sides", str(args.circuit_tube_sides), "--soma-vox", str(args.circuit_soma_vox), "--out-obj", cobj_path],
             capture_output=True,
             text=True,
             check=True,
