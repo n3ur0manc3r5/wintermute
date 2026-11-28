@@ -134,8 +134,10 @@ def build_circuit_html(out_html: str, neuron_records: list, edges_csv: str):
 
     packed_neurons = []
     root_to_type = {}
+    root_to_idx = {}
     for idx, (rec, v, vn, f) in enumerate(loaded):
         root_to_type[str(rec["root_id"])] = rec["cell_type"]
+        root_to_idx[str(rec["root_id"])] = idx
         ct = rec["cell_type"]
 
         if ct in CELL_TYPE_COLORS:
@@ -172,6 +174,8 @@ def build_circuit_html(out_html: str, neuron_records: list, edges_csv: str):
 
     syn_pts = []
     syn_cols = []
+    syn_pre = []
+    syn_post = []
     if edges_csv and os.path.exists(edges_csv):
         with open(edges_csv, newline="") as ef:
             for row in csv.DictReader(ef):
@@ -185,6 +189,8 @@ def build_circuit_html(out_html: str, neuron_records: list, edges_csv: str):
                 sc = SYNAPSE_COLORS[direction]
                 syn_pts.extend([float(pn[0]), float(-pn[1]), float(pn[2])])
                 syn_cols.extend(sc)
+                syn_pre.append(root_to_idx.get(row["pre_pt_root_id"], -1))
+                syn_post.append(root_to_idx.get(row["post_pt_root_id"], -1))
 
     n_total = len(packed_neurons)
     n_exc = sum(1 for p in packed_neurons if p["exc"])
@@ -228,6 +234,8 @@ const SPAN_UM={half_span*2.0:.2f};
 const NEURONS={json.dumps(packed_neurons, separators=(",", ":"))};
 const SYN_PTS=new Float32Array({json.dumps(syn_pts, separators=(",", ":"))});
 const SYN_COLS=new Float32Array({json.dumps(syn_cols, separators=(",", ":"))});
+const SYN_PRE={json.dumps(syn_pre)};
+const SYN_POST={json.dumps(syn_post)};
 const canvas=document.getElementById('c');
 const gl=canvas.getContext('webgl2',{{antialias:true,alpha:false}});
 if(!gl){{document.body.innerHTML='<p style="padding:20px">webgl2 required</p>';throw new Error('no webgl2');}}
@@ -268,7 +276,7 @@ const pb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,pb);gl.bufferData(gl.AR
 const lp=gl.getAttribLocation(ptProg,'aPos');gl.enableVertexAttribArray(lp);gl.vertexAttribPointer(lp,3,gl.FLOAT,false,0,0);
 const cb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,cb);gl.bufferData(gl.ARRAY_BUFFER,SYN_COLS,gl.STATIC_DRAW);
 const lc=gl.getAttribLocation(ptProg,'aCol');gl.enableVertexAttribArray(lc);gl.vertexAttribPointer(lc,3,gl.FLOAT,false,0,0);
-gl.bindVertexArray(null);gpuSyn={{vao,count:SYN_PTS.length/3}};
+gl.bindVertexArray(null);gpuSyn={{vao,pb,cb,count:SYN_PTS.length/3}};
 }}
 document.getElementById('stats').textContent=`${{gpuNeurons.length}} neurons | ${{totalFaces.toLocaleString()}} faces | ${{SYN_PTS.length/3}} synapses | ${{SPAN_UM.toFixed(0)}} um`;
 const listEl=document.getElementById('list');
@@ -329,6 +337,10 @@ if(showSyn&&gpuSyn){{
 gl.useProgram(ptProg);
 gl.uniformMatrix4fv(gl.getUniformLocation(ptProg,'uMVP'),false,mvp);
 gl.uniform1f(gl.getUniformLocation(ptProg,'uSize'),Math.max(4.0,Math.min(10.0,6.5/Math.sqrt(dist))));
+const vis=gpuNeurons.map(g=>g.visible);const fp=[],fc=[];
+for(let k=0;k<SYN_PRE.length;k++){{if((SYN_PRE[k]>=0&&vis[SYN_PRE[k]])||(SYN_POST[k]>=0&&vis[SYN_POST[k]])){{fp.push(SYN_PTS[3*k],SYN_PTS[3*k+1],SYN_PTS[3*k+2]);fc.push(SYN_COLS[3*k],SYN_COLS[3*k+1],SYN_COLS[3*k+2]);}}}}
+gl.bindBuffer(gl.ARRAY_BUFFER,gpuSyn.pb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(fp),gl.DYNAMIC_DRAW);
+gl.bindBuffer(gl.ARRAY_BUFFER,gpuSyn.cb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(fc),gl.DYNAMIC_DRAW);gpuSyn.count=fp.length/3;
 gl.bindVertexArray(gpuSyn.vao);gl.drawArrays(gl.POINTS,0,gpuSyn.count);
 }}
 }}
