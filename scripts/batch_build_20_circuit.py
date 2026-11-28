@@ -13,6 +13,46 @@ from cloudvolume import CloudVolume
 
 PUBLIC_M1300 = "precomputed://https://storage.googleapis.com/iarpa_microns/minnie/minnie65/seg_m1300"
 
+EXCITATORY_TYPES = {"23P", "4P", "5P-IT", "5P-ET", "5P-NP", "6P-IT", "6P-CT"}
+INHIBITORY_TYPES = {"BC", "MC", "BPC", "NGC"}
+
+# colour for each inhibitory cell type; BC and MC keep their old colours
+CELL_TYPE_COLORS = {
+    "BC": [1.00, 0.76, 0.18],   # yellow
+    "MC": [0.98, 0.30, 0.58],   # pink
+    "BPC": [0.62, 0.40, 1.00],  # purple
+    "NGC": [1.00, 0.45, 0.10],  # orange
+}
+
+# any cell type not listed above is drawn grey, so it stands out
+UNKNOWN_COLOR = [0.55, 0.55, 0.55]
+
+
+# colour of each synapse dot, by direction (sending cell to receiving cell)
+SYNAPSE_COLORS = {
+    "E→E": [0.35, 0.98, 0.45],  # green
+    "E→I": [1.00, 0.90, 0.25],  # yellow
+    "I→E": [1.00, 0.28, 0.32],  # red
+    "I→I": [0.78, 0.42, 1.00],  # purple
+}
+
+def is_inhibitory(cell_type):
+    return cell_type in INHIBITORY_TYPES
+
+
+def legend_html():
+    def swatch(rgb, label):
+        r, g, b = (round(c * 255) for c in rgb)
+        return (f'<span style="display:inline-flex;align-items:center;gap:4px;margin-right:8px">'
+                f'<span class="sw" style="background:rgb({r},{g},{b})"></span>{label}</span>')
+
+    cells = [swatch([0.16, 0.78, 0.96], "excitatory")]
+    cells += [swatch(rgb, name) for name, rgb in CELL_TYPE_COLORS.items()]
+    synapses = [swatch(rgb, name) for name, rgb in SYNAPSE_COLORS.items()]
+    return ('<div style="color:#8aa4bd;font-size:10px;">cells</div>'
+            '<div class="row">' + "".join(cells) + '</div>'
+            '<div style="color:#8aa4bd;font-size:10px;">synapses (sender→receiver)</div>'
+            '<div class="row">' + "".join(synapses) + '</div>')
 
 def decimate_mesh_grid(verts: np.ndarray, faces: np.ndarray, cell_nm: float = 240.0):
     q = np.floor(verts / cell_nm).astype(np.int64)
@@ -97,12 +137,14 @@ def build_circuit_html(out_html: str, neuron_records: list, edges_csv: str):
     for idx, (rec, v, vn, f) in enumerate(loaded):
         root_to_type[str(rec["root_id"])] = rec["cell_type"]
         ct = rec["cell_type"]
-        if ct == "MC":
-            col = [0.98, 0.30, 0.58]
-        elif ct == "BC":
-            col = [1.00, 0.76, 0.18]
-        else:
+
+        if ct in CELL_TYPE_COLORS:
+            col = CELL_TYPE_COLORS[ct]
+        elif ct in EXCITATORY_TYPES:
             col = e_palette[idx % len(e_palette)]
+        else:
+            print(f"warning: unknown cell type {ct!r} for {rec['root_id']}, drawn grey")
+            col = UNKNOWN_COLOR
 
         pos_q = np.round(np.clip((v - center) * inv_half, -1.0, 1.0) * 32767.0).astype("<i2")
         nrm_q = np.round(np.clip(vn, -1.0, 1.0) * 127.0).astype("<i1")
@@ -113,6 +155,8 @@ def build_circuit_html(out_html: str, neuron_records: list, edges_csv: str):
             "node_id": rec["node_id"],
             "root_id": str(rec["root_id"]),
             "cell_type": ct,
+            "exc": ct in EXCITATORY_TYPES,
+            "inh": is_inhibitory(ct),            
             "color": col,
             "soma": [float(sn[0]), float(-sn[1]), float(sn[2])],
             "cable_um": round(rec.get("cable_um", 0.0), 1),
@@ -135,22 +179,16 @@ def build_circuit_html(out_html: str, neuron_records: list, edges_csv: str):
                 pn = np.clip((p - center) * inv_half, -1.0, 1.0)
                 pre_t = root_to_type.get(row["pre_pt_root_id"], "23P")
                 post_t = root_to_type.get(row["post_pt_root_id"], "23P")
-                pre_i = pre_t in ("MC", "BC")
-                post_i = post_t in ("MC", "BC")
-                if not pre_i and not post_i:
-                    sc = [0.35, 0.98, 0.45]
-                elif not pre_i and post_i:
-                    sc = [1.00, 0.90, 0.25]
-                elif pre_i and not post_i:
-                    sc = [1.00, 0.28, 0.32]
-                else:
-                    sc = [0.78, 0.42, 1.00]
+                pre_i = is_inhibitory(pre_t)
+                post_i = is_inhibitory(post_t)
+                direction = ("I" if pre_i else "E") + "→" + ("I" if post_i else "E")
+                sc = SYNAPSE_COLORS[direction]
                 syn_pts.extend([float(pn[0]), float(-pn[1]), float(pn[2])])
                 syn_cols.extend(sc)
 
     n_total = len(packed_neurons)
-    n_exc = sum(1 for p in packed_neurons if p["cell_type"] not in ("MC", "BC"))
-    n_inh = n_total - n_exc
+    n_exc = sum(1 for p in packed_neurons if p["exc"])
+    n_inh = sum(1 for p in packed_neurons if p["inh"])
 
     html = f"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <title>wintermute circuit viewer</title>
@@ -181,6 +219,7 @@ button:hover{{background:#1f334d;}}button.on{{background:#1b5a7a;border-color:#4
 <button id="bReset">reset view</button>
 <button id="bNone">hide all</button>
 </div>
+{legend_html()}
 <div id="list"></div>
 <div style="color:#6c849c;font-size:10px;">drag: orbit | shift/right: pan | scroll: zoom | click row: focus soma</div>
 </div>
@@ -251,8 +290,8 @@ listEl.appendChild(row);
 let showSyn=true,xray=false,yaw=0.35,pitch=0.14,dist=2.3,tx=0,ty=0,tz=0;
 function setMask(fn){{gpuNeurons.forEach((g,i)=>{{g.visible=fn(g.meta);checks[i].checked=g.visible;}});draw();}}
 document.getElementById('bAll').onclick=()=>setMask(()=>true);
-document.getElementById('bExc').onclick=()=>setMask(m=>m.cell_type==='23P');
-document.getElementById('bInh').onclick=()=>setMask(m=>m.cell_type!=='23P');
+document.getElementById('bExc').onclick=()=>setMask(m=>m.exc);
+document.getElementById('bInh').onclick=()=>setMask(m=>m.inh);
 document.getElementById('bNone').onclick=()=>setMask(()=>false);
 document.getElementById('bSyn').onclick=e=>{{showSyn=!showSyn;e.target.classList.toggle('on',showSyn);draw();}};
 document.getElementById('bXray').onclick=e=>{{xray=!xray;e.target.classList.toggle('on',xray);draw();}};
