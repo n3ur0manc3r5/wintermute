@@ -158,7 +158,8 @@ def build_circuit_html(out_html: str, neuron_records: list, edges_csv: str):
             "root_id": str(rec["root_id"]),
             "cell_type": ct,
             "exc": ct in EXCITATORY_TYPES,
-            "inh": is_inhibitory(ct),            
+            "inh": is_inhibitory(ct),
+            "html": rec.get("html_path", ""),
             "color": col,
             "soma": [float(sn[0]), float(-sn[1]), float(sn[2])],
             "cable_um": round(rec.get("cable_um", 0.0), 1),
@@ -291,7 +292,8 @@ const sw=document.createElement('span');sw.className='sw';
 sw.style.background=`rgb(${{Math.round(m.color[0]*255)}},${{Math.round(m.color[1]*255)}},${{Math.round(m.color[2]*255)}})`;
 const lbl=document.createElement('span');lbl.textContent=`#${{String(m.node_id).padStart(2,'0')}} ${{m.cell_type}}`;
 const mt=document.createElement('span');mt.className='meta';mt.textContent=`${{(m.cable_um/1000).toFixed(1)}}mm`;
-row.append(cb,sw,lbl,mt);
+const op=document.createElement('a');op.textContent='open';op.href=m.html;op.target='_blank';op.rel='noopener';op.style.cssText='color:#55d0ff;margin-left:6px;font-size:10px;';op.onclick=e=>e.stopPropagation();
+row.append(cb,sw,lbl,mt,op);
 row.onclick=()=>{{tx=m.soma[0];ty=m.soma[1];tz=m.soma[2];dist=0.55;draw();}};
 listEl.appendChild(row);
 }});
